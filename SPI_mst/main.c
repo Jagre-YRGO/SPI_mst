@@ -9,14 +9,14 @@
 #include  <avr/io.h>
 #include <util/delay.h>
 
-void spi_write(uint8_t d){
+uint8_t spi_write(uint8_t d){
 	SPDR = d;				//write data
 	
 	/* Wait for transmission complete */
 	while(!(SPSR & (1<<SPIF)));
 	
 	
-	return;
+	return SPDR; //return received value
 }
 
 
@@ -30,6 +30,8 @@ int main(void)
 	SPCR = (1<<SPE)|(1<<MSTR)|(1<<SPR0);
 	
 	uint16_t d = 0;
+	uint8_t d_lsb = 0;
+	uint8_t d_msb = 0;
 	
     while (1) 
     {
@@ -38,25 +40,20 @@ int main(void)
 		//Resulting in single-ended mode, CH1 active (p.15 in data sheet)
 		//Leading zero inserted to achieve neat byte-boundary (p.17 in data sheet)
 		PORTB &= ~_BV(PORTB0);	//set ss low
-		spi_write(0x78); 
-		spi_write(0x00);
+		d_msb = spi_write(0x78) & 0x03; 
+		d_lsb = spi_write(0x00);
 		PORTB |= _BV(PORTB0);	//set ss High
+		
+		/*Merge together and shift by two (according to MCP4812)*/
+		d = ((d_msb << 8) | (d_lsb)) << 2;
 		
 		/*Write DA*/
 		//All config bits high, resulting in Active mode, 1x gain (2.048V max out), DACB used
 		//p.22 in data sheet
 		PORTB &= ~_BV(PORTB2);	//set ss low
-		spi_write(((uint8_t)((d & 0x0F00) >> 8)) | 0xF0);
-		spi_write((uint8_t)(d & 0x00FF));
+		(void)spi_write(((uint8_t)((d & 0x0F00) >> 8)) | 0xF0);
+		(void)spi_write((uint8_t)(d & 0x00FF));
 		PORTB |= _BV(PORTB2);	//set ss High
-	
-
-		if (d == 0x0FFF )
-			d = 0;
-		else
-			d++;
-
-		//_delay_ms(100);
 		
     }
 }
